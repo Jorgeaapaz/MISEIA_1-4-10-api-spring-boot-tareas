@@ -249,3 +249,88 @@ Con la aplicacion levantada en local:
 - Agregar paginacion en el listado de tareas
 - Agregar manejo global de excepciones con `@ControllerAdvice`
 - Considerar agregar Swagger/OpenAPI para documentacion automatica
+
+---
+
+# Retrospectiva de Sesion — 2026-05-26
+### Generacion de Coleccion Postman para la API de Tareas
+
+## Resumen / Overview
+Se genero una coleccion Postman v2.1 completa para la API REST de tareas Spring Boot. La coleccion documenta los 6 endpoints del `TareaController`, incluyendo ejemplos de request/response, variables de entorno y descripciones detalladas para cada operacion.
+
+## Proceso / Process
+
+Se escaneo el controlador `TareaController.java` para extraer todos los endpoints y se analizo el modelo `Tarea.java` para construir los ejemplos de body y response precisos. La coleccion fue generada directamente en el directorio raiz del proyecto.
+
+### Archivos creados
+```
+api_tareas_spring-boot.postman_collection.json   (raiz del proyecto)
+```
+
+## Endpoints documentados en la coleccion
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | /api/tareas | Listar todas las tareas |
+| GET | /api/tareas/{id} | Obtener tarea por ID |
+| GET | /api/tareas/estado/{completada} | Filtrar por estado (true/false) |
+| POST | /api/tareas | Crear nueva tarea |
+| PUT | /api/tareas/{id} | Actualizar tarea existente |
+| DELETE | /api/tareas/{id} | Eliminar tarea |
+
+## Como importar la coleccion en Postman
+
+1. Abrir Postman
+2. Click en **Import** (esquina superior izquierda)
+3. Seleccionar el archivo `api_tareas_spring-boot.postman_collection.json` desde la raiz del proyecto
+4. La coleccion aparecera con la carpeta **Tareas** y los 6 requests listos para usar
+
+## Variables de la coleccion
+
+| Variable | Valor por defecto | Descripcion |
+|----------|------------------|-------------|
+| `baseUrl` | `http://localhost:8080` | URL base del servidor Spring Boot |
+| `id` | `1` | ID de tarea para pruebas |
+| `completada` | `false` | Estado para filtrado |
+
+Para cambiar el entorno (ej. staging), modificar `baseUrl` en las variables de la coleccion desde Postman → Edit Collection → Variables.
+
+## Levantar la API para probar con Postman
+
+```bash
+# Configurar entorno si Maven no esta en PATH
+export PATH="$HOME/.m2/wrapper/dists/apache-maven-3.9.6/bin:$PATH"
+export JAVA_HOME="/c/Program Files/Java/jdk-17"
+
+# Levantar la aplicacion
+mvn spring-boot:run
+# La API queda disponible en http://localhost:8080
+```
+
+## Ejemplo de body para POST /api/tareas
+
+```json
+{
+  "titulo": "Nueva tarea de ejemplo",
+  "descripcion": "Descripcion detallada de la tarea",
+  "completada": false
+}
+```
+
+Restricciones de validacion del modelo `Tarea`:
+- `titulo`: obligatorio, maximo 200 caracteres (`@NotBlank`, `@Size(max=200)`)
+- `descripcion`: opcional, maximo 1000 caracteres (`@Size(max=1000)`)
+- `completada`: booleano, por defecto `false`
+- `fechaCreacion` y `fechaActualizacion`: autogenerados por JPA (`@PrePersist`, `@PreUpdate`)
+
+## Resultados y conclusiones / Results & Conclusions
+
+- Coleccion generada exitosamente con los 6 endpoints del controlador Spring Boot
+- Incluye ejemplos de response para casos exitosos (200, 201, 204) y errores (400, 404)
+- Variables de coleccion configuradas para facilitar cambios de entorno sin editar cada request
+- Archivo listo para importar en Postman o compartir con el equipo via repositorio Git
+
+### Proximos pasos sugeridos
+- Agregar un **Postman Environment** separado para staging/produccion con MySQL
+- Considerar agregar **tests de Postman** (scripts en la pestana "Tests") para validacion automatica de responses
+- Evaluar generacion de documentacion con **Swagger/OpenAPI** (`springdoc-openapi`) como complemento
