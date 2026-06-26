@@ -44,3 +44,6 @@ application-prod.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Video recordings
+vid/
