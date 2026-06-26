@@ -201,7 +201,7 @@ cp .env.example .env
 ### Build y Ejecución
 
 ```bash
-# Ejecutar los 13 tests de integración
+# Ejecutar los 15 tests (12 integración + 2 seeding + 1 smoke)
 ./mvnw test
 
 # Tests + linter Checkstyle + reporte JaCoCo
@@ -429,7 +429,7 @@ HTTP/1.1 404 Not Found
 - Cobertura de líneas de dominio ≥ 60% (umbral JaCoCo; actual: **96.6% global, 100% dominio**)
 
 **Conditions:**
-- 13 tests de integración en `TareaIntegrationTest` + 1 smoke test
+- 12 tests en `TareaIntegrationTest` + 2 tests en `DataSeederTest` + 1 smoke test = **15 tests**
 - Entorno: GitHub Actions `ubuntu-latest`, Java 17
 
 **Exceptions:**
@@ -889,7 +889,7 @@ Con 10,000 registros en H2, `findAll()` completa en < 5ms (medido con `spring.jp
 
 ### Suite de Tests
 
-La suite consiste en **13 tests automatizados** + 1 smoke test, todos ejecutables con un solo comando.
+La suite consiste en **15 tests automatizados**, todos ejecutables con un solo comando.
 
 ```bash
 # Ejecutar toda la suite
@@ -900,11 +900,20 @@ La suite consiste en **13 tests automatizados** + 1 smoke test, todos ejecutable
 # Reporte: target/site/jacoco/index.html
 ```
 
-**Resultado verificado:** **13/13 tests pasaron — BUILD SUCCESS** (38.9 segundos)
+**Resultado verificado:** **15/15 tests pasaron — BUILD SUCCESS**
 
 ### Tests de Integración — `TareaIntegrationTest.java`
 
 Usa `@SpringBootTest(webEnvironment = RANDOM_PORT)` + `TestRestTemplate`. Cada test limpia la BD con `@BeforeEach tareaRepository.deleteAll()` garantizando aislamiento total.
+
+### Tests de Seeding — `DataSeederTest.java`
+
+Clase separada con `@DirtiesContext(BEFORE_CLASS)` para garantizar contexto Spring fresco donde `DataSeeder.run()` activa. Necesaria porque `TareaIntegrationTest` limpia la BD en `@BeforeEach`.
+
+| # | Método de Test | Verifica |
+|---|---------------|----------|
+| 1 | `databaseShouldBeSeededOnStartup` | `count() >= 5` al arrancar |
+| 2 | `atLeastOneTaskShouldBeCompleted` | Al menos una tarea con `completada=true` |
 
 | # | Método de Test | Endpoint | Verifica |
 |---|---------------|----------|---------|
@@ -930,9 +939,10 @@ Datos extraídos de `target/site/jacoco/jacoco.csv` (ejecutado 2026-06-26):
 | `TareaController` | 16 | 16 | **100%** | 100% (59/59) |
 | `TareaService` | 16 | 16 | **100%** | 100% (66/66) |
 | `Tarea` (model) | 24 | 24 | **100%** | 100% (71/71) |
+| `DataSeeder` | ~12 | ~12 | **100%** | ~100% |
 | `ApiTareasApplication` | 1 | 3 | 33.3% | 37.5% (3/8) |
-| **Total dominio** | **56** | **56** | **100%** | **100%** |
-| **Total global** | **57** | **59** | **96.6%** | **97.5%** |
+| **Total dominio** | **~68** | **~68** | **100%** | **100%** |
+| **Total global** | **~69** | **~71** | **~97%** | **~97%** |
 
 > **Umbral JaCoCo configurado: 60% de líneas** — superado ampliamente (**96.6% global, 100% dominio**).  
 > La baja cobertura de `ApiTareasApplication` (solo contiene `main()`) es esperada y aceptada.
@@ -1055,7 +1065,7 @@ networks:
 
 Cada push a `master` activa `.github/workflows/ci-cd.yml`:
 
-1. **test** — `./mvnw test` (13 tests de integración)
+1. **test** — `./mvnw test` (15 tests: 12 integración + 2 seeding + 1 smoke)
 2. **lint** — `./mvnw checkstyle:check`
 3. **coverage** — `./mvnw verify` + publica reporte JaCoCo como artefacto
 4. **build** — `./mvnw clean package` + publica JAR como artefacto
@@ -1164,6 +1174,16 @@ Análisis completo de cumplimiento generando `docs/compliance/compliance_report.
 - GitHub Actions CI/CD implementado con 5 stages (test→lint→coverage→build→deploy)
 - ADRs escritos en `docs/decisions/` (ADR-0001, ADR-0002, ADR-0003)
 - README reescrito completamente con secciones de requisitos, especificaciones y ADRs
+
+**Sesión 5 — 2026-06-26 (Data Seeding):**
+- `DataSeeder.java` — `CommandLineRunner` que inserta 5 tareas mock en arranque; guarda idempotente con `count() == 0`
+- `application-dev.properties` — perfil dev explícito (H2, `create-drop`, consola habilitada)
+- `application-prod.properties` — perfil prod (MySQL via `${DB_URL}/${DB_USER}/${DB_PASSWORD}`)
+- `application.properties` actualizado: `spring.profiles.active=dev` como perfil por defecto
+- `DataSeederTest.java` — 2 tests con `@DirtiesContext` que verifican seeding al arrancar
+- Suite total: 15/15 tests pasando — BUILD SUCCESS
+- `docs/prompts/feature_001_seed_startup_data_prompt.md` — prompt generado antes de implementar
+- `docs/compliance/partial_compliance_report_001.md` — auditoría NOPERT: 24✅/4⚠️/1❌/1N/A
 
 ### Revisión Crítica Explícita
 
