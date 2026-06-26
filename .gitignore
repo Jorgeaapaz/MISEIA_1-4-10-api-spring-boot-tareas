@@ -37,6 +37,7 @@ spring.log
 # Environment / Secrets
 .env
 .env.*
+!.env.example
 application-local.properties
 application-prod.properties
 **/src/main/resources/application-secrets.properties

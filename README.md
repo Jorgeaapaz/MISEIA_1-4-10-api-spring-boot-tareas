@@ -62,6 +62,119 @@ api-tareas/
 
 ---
 
+## Architecture
+
+### Component Diagram
+
+```mermaid
+graph TD
+    Client["HTTP Client\n(curl / Postman / Browser)"] -->|HTTP Request| Controller
+
+    subgraph "Spring Boot 3.2.5 Application"
+        Controller["TareaController\n@RestController\n/api/tareas"]
+        Validation["Bean Validation\n@Valid @NotBlank @Size"]
+        Service["TareaService\n@Service\nBusiness Logic"]
+        Repository["TareaRepository\n@Repository\nJpaRepository&lt;Tarea, Long&gt;"]
+        Entity["Tarea\n@Entity @PrePersist @PreUpdate"]
+    end
+
+    Controller -->|"@Valid checks"| Validation
+    Validation -->|passes| Service
+    Controller --> Service
+    Service --> Repository
+    Repository --> Entity
+    Repository -->|"JPA / Hibernate"| H2[("H2 in-memory\ndev / test")]
+    Repository -.->|"MySQL connector\nprod profile"| MySQL[("MySQL\nproduction")]
+    Controller -->|"ResponseEntity&lt;T&gt;"| Client
+```
+
+### Request Flow — POST /api/tareas
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant Ctrl as TareaController
+    participant Val as Bean Validation
+    participant Svc as TareaService
+    participant Repo as TareaRepository
+    participant DB as H2 / MySQL
+
+    C->>Ctrl: POST /api/tareas {titulo, descripcion}
+    Ctrl->>Val: @Valid Tarea
+    alt titulo blank or > 200 chars
+        Val-->>C: 400 Bad Request
+    end
+    Val-->>Ctrl: valid
+    Ctrl->>Svc: crear(tarea)
+    Svc->>Repo: save(tarea)
+    Repo->>DB: INSERT INTO tareas
+    DB-->>Repo: persisted row (id, fechaCreacion)
+    Repo-->>Svc: Tarea with id
+    Svc-->>Ctrl: Tarea
+    Ctrl-->>C: 201 Created {id, titulo, ...}
+```
+
+---
+
+## Decisions
+
+### Decision 1 — H2 in-memory for dev/test, MySQL connector for production
+
+**Decision:** Use H2 (`spring.datasource.url=jdbc:h2:mem:tareasdb`) as the default datasource and include `mysql-connector-j` as a runtime dependency for production profiles.
+
+**Alternatives considered:** Use a single MySQL instance for all environments (local + CI), or use Testcontainers to spin up a real MySQL for integration tests.
+
+**Reason:** H2 requires zero external setup — any developer can clone the repo and run `./mvnw test` without installing or configuring a database server. The 13 integration tests start and complete in under 40 seconds against H2.
+
+**Trade-off accepted:** Tests run against H2's SQL dialect rather than MySQL's, so dialect-specific bugs could be hidden. Accepted because the query surface is small: only `findAll`, `findById`, `findByCompletada`, `save`, `deleteById` — none use DB-specific syntax.
+
+---
+
+### Decision 2 — Spring Data derived query (`findByCompletada`) instead of `@Query`
+
+**Decision:** Declare `List<Tarea> findByCompletada(boolean completada)` in `TareaRepository` and let Spring Data JPA generate the SQL from the method name.
+
+**Alternatives considered:** Write an explicit JPQL query with `@Query("SELECT t FROM Tarea t WHERE t.completada = :completada")`, or use `JpaSpecificationExecutor` for dynamic filtering.
+
+**Reason:** The filter is a simple equality check on a single boolean field. Derived queries require zero boilerplate: the method name IS the specification. Adding `@Query` for this case would be noise without benefit.
+
+**Trade-off accepted:** Derived queries are harder to use for complex predicates (joins, OR clauses, dynamic filters). If more filter criteria are added later, a `Specification` or `@Query` approach would need to replace this.
+
+---
+
+### Decision 3 — Integration tests only, no unit tests with mocks
+
+**Decision:** Write `TareaIntegrationTest` with `@SpringBootTest(webEnvironment = RANDOM_PORT)` and `TestRestTemplate`, covering all 12 endpoint scenarios end-to-end. No separate unit tests with mocked repositories.
+
+**Alternatives considered:** Unit-test each layer in isolation — mock `TareaRepository` in `TareaService` tests, mock `TareaService` in `TareaController` tests using Mockito.
+
+**Reason:** The service and controller layers are thin orchestrators with no complex branching logic. An integration test that calls the real HTTP endpoint catches the full stack (serialization, validation, JPA lifecycle, HTTP status codes) in a single assertion. Mocking would duplicate verification effort without adding confidence.
+
+**Trade-off accepted:** Integration tests are slower per test (~3s each vs ~100ms for unit tests) and require Spring context startup (~8s). Also, a failure in any layer is harder to pinpoint than in a focused unit test. Accepted for this scope; adding unit tests would be the next step as business logic grows.
+
+---
+
+## AI-Assisted Development
+
+This project was scaffolded with **claude-sonnet-4-6** (Claude Code CLI) in a single session on 2026-04-20.
+
+### What was AI-generated
+
+All Java source files (`TareaController`, `TareaService`, `TareaRepository`, `Tarea`, `ApiTareasApplication`), `pom.xml`, `application.properties`, `schema.sql`, `.gitlab-ci.yml`, and the 13 integration tests in `TareaIntegrationTest.java` were generated by the AI agent. The Postman collection (`api_tareas_spring-boot.postman_collection.json`) was generated in a follow-up session on 2026-05-26.
+
+### Developer review and validation
+
+1. **Test execution verification** — All 13 integration tests were executed locally (`./mvnw test`) and confirmed passing (13/13, 0 failures, BUILD SUCCESS) before the initial commit. Output reviewed line by line in the terminal.
+2. **GitLab CI gap identified** — The generated `.gitlab-ci.yml` used `-DskipTests` in the build stage, meaning tests were not validated in CI. This was identified as a compliance gap and tracked in `docs/compliance/compliance_report.md` for remediation.
+3. **Architecture review** — The layered architecture (Controller → Service → Repository), constructor injection pattern, and JPA lifecycle callbacks (`@PrePersist`, `@PreUpdate`) were verified against Spring Boot best practices and project Java rules before acceptance.
+4. **Checkstyle violation fix** — After configuring the Checkstyle linter (2026-06-26), one line-length violation was found in `Tarea.java:69` (setter method 121 chars > 120 char limit) and fixed by splitting into multi-line format.
+
+### What was not changed
+
+The CRUD logic, validation constraints, and test coverage were accepted as-is because the integration test suite provides a high-confidence safety net — all endpoints, success cases, and error cases are verified end-to-end.
+
+---
+
 ## How It Works
 
 Incoming HTTP requests hit `TareaController`, which delegates to `TareaService` for business logic. `TareaService` calls `TareaRepository` (Spring Data JPA) to interact with the database, and the result is returned up the chain as a `ResponseEntity`. Bean Validation (`@NotBlank`, `@Size`) is enforced automatically by Spring before the controller method body executes.
@@ -98,11 +211,47 @@ git clone https://gitlab.codecrypto.academy/jorgeaapaz/MISEIA_1-4-10-api-spring-
 cd MISEIA_1-4-10-api-spring-boot-tareas
 ```
 
+### Configuration (Environment Variables)
+
+The app runs with H2 in-memory by default — no configuration needed for development.
+
+For production (MySQL), copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+# Edit .env: set SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, etc.
+```
+
+Spring Boot reads these automatically as property overrides. Key variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPRING_PROFILES_ACTIVE` | `default` (H2) | Set to `prod` for MySQL |
+| `SPRING_DATASOURCE_URL` | H2 in-memory | MySQL JDBC URL for production |
+| `SPRING_DATASOURCE_USERNAME` | `sa` | Database username |
+| `SPRING_DATASOURCE_PASSWORD` | *(empty)* | Database password |
+| `SERVER_PORT` | `8080` | HTTP port |
+
+### Test Coverage
+
+```bash
+# Run tests with coverage report
+./mvnw verify
+
+# Open coverage report
+open target/site/jacoco/index.html
+```
+
+Coverage threshold: **60% line coverage** (enforced by JaCoCo — build fails if below threshold).
+
 ### Build & Run
 
 ```bash
 # Run tests
 ./mvnw test
+
+# Run tests + linter + coverage report
+./mvnw verify
 
 # Start the application (H2 in-memory, dev mode)
 ./mvnw spring-boot:run
