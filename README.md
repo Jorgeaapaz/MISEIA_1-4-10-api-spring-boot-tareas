@@ -262,6 +262,72 @@ H2 console (dev only): `http://localhost:8080/h2-console` — JDBC URL: `jdbc:h2
 
 ---
 
+## Deployment
+
+### Public URL
+
+The API is deployed and accessible at:
+
+**https://api-tareas.deviaaps.com/api/tareas**
+
+```bash
+# Verify the deployment is live
+curl https://api-tareas.deviaaps.com/api/tareas
+# Expected: 200 OK  []
+```
+
+### CI/CD Badge
+
+[![CI/CD](https://github.com/Jorgeaapaz/MISEIA_1-4-10-api-spring-boot-tareas/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Jorgeaapaz/MISEIA_1-4-10-api-spring-boot-tareas/actions/workflows/ci-cd.yml)
+
+### Architecture
+
+| Layer | Technology |
+|-------|-----------|
+| Cloud | GCP VM `ubuntu-vm-docker28` (`us-south1-c`) |
+| Container runtime | Docker 28 |
+| Reverse proxy / TLS | Traefik v3.3, wildcard cert `*.deviaaps.com` (Let's Encrypt) |
+| App | Spring Boot JAR in `eclipse-temurin:17-jre-alpine` container |
+| Network | `miseia-net` Docker bridge (shared with Traefik and other services) |
+| External port | `30001` → container port `8080` |
+
+### Automated Deployment (GitHub Actions)
+
+Every push to `master` triggers `.github/workflows/ci-cd.yml`:
+
+1. **test** — `./mvnw test` (13 integration tests)
+2. **lint** — `./mvnw checkstyle:check`
+3. **coverage** — `./mvnw verify` + upload JaCoCo report artifact
+4. **build** — `./mvnw clean package` → uploads JAR artifact
+5. **deploy** — SCP files to VM + `docker build && docker compose up -d`
+
+The deploy job only runs on push to `master`, not on pull requests.
+
+### Manual Deployment
+
+```bash
+# 1. Build JAR
+./mvnw clean package -DskipTests
+
+# 2. Copy to VM
+scp -i C:\ubuntuiso\.ssh\vboxuser \
+  target/api-tareas-1.0.0.jar Dockerfile docker-compose.yml \
+  gcvmuser@34.174.56.186:~/MISEIA1-4-10_api-spring-boot-tareas/
+
+# 3. Deploy on VM
+ssh -i C:\ubuntuiso\.ssh\vboxuser gcvmuser@34.174.56.186 "
+  cd ~/MISEIA1-4-10_api-spring-boot-tareas &&
+  docker build -t api-tareas:latest . &&
+  docker compose down --remove-orphans || true &&
+  docker compose up -d
+"
+
+# 4. Verify
+curl https://api-tareas.deviaaps.com/api/tareas
+```
+
+---
+
 ## Example Output
 
 ### Success — Create a task

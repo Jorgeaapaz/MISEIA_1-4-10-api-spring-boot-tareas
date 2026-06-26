@@ -1,0 +1,22 @@
+services:
+  api-tareas:
+    image: api-tareas:latest
+    container_name: api-tareas
+    restart: unless-stopped
+    ports:
+      - "30001:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api-tareas.rule=Host(`api-tareas.deviaaps.com`)"
+      - "traefik.http.routers.api-tareas.entrypoints=websecure"
+      - "traefik.http.routers.api-tareas.tls=true"
+      - "traefik.http.routers.api-tareas.tls.certresolver=cloudflare"
+      - "traefik.http.services.api-tareas-svc.loadbalancer.server.port=8080"
+    networks:
+      - miseia-net
+
+networks:
+  miseia-net:
+    external: true
