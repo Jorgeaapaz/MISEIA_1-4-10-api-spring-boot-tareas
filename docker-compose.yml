@@ -9,11 +9,11 @@ services:
       - SPRING_PROFILES_ACTIVE=default
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.api-tareas.rule=Host(`api-tareas.deviaaps.com`)"
-      - "traefik.http.routers.api-tareas.entrypoints=websecure"
-      - "traefik.http.routers.api-tareas.tls=true"
-      - "traefik.http.routers.api-tareas.tls.certresolver=cloudflare"
-      - "traefik.http.services.api-tareas-svc.loadbalancer.server.port=8080"
+      - "traefik.http.routers.tareas-spring.rule=Host(`api-tareas.deviaaps.com`)"
+      - "traefik.http.routers.tareas-spring.entrypoints=websecure"
+      - "traefik.http.routers.tareas-spring.tls=true"
+      - "traefik.http.routers.tareas-spring.tls.certresolver=cloudflare"
+      - "traefik.http.services.tareas-spring-svc.loadbalancer.server.port=8080"
     networks:
       - miseia-net
 
