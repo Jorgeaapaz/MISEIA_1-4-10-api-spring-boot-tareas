@@ -1,18 +1,46 @@
 stages:
+  - test
+  - lint
   - build
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG-m2"
+  paths:
+    - .m2/repository
+
+test:
+  stage: test
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - mvn test
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-m2"
+    paths:
+      - .m2/repository
+
+lint:
+  stage: lint
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - mvn checkstyle:check
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-m2"
+    paths:
+      - .m2/repository
 
 build:
   stage: build
   image: maven:3.9-eclipse-temurin-17
   script:
-    - mvn clean package -DskipTests
+    - NODE_ENV=production mvn clean package -DskipTests
   artifacts:
     paths:
       - target/*.jar
-    expire_in: 1 hour
+    expire_in: 1 week
   cache:
-    key: "$CI_COMMIT_REF_SLUG"
+    key: "$CI_COMMIT_REF_SLUG-m2"
     paths:
       - .m2/repository
-  variables:
-    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
